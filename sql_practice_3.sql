@@ -32,3 +32,63 @@ with ranked_orders as (
 select customer_id, order_id, order_date, order_total
 from ranked_orders
 where rn = 1;
+
+
+
+
+select c.customer_id, c.name, COUNT(o.order_id) as order_count, SUM(COALESCE(o.total_amount, 0)) as total_spend
+from customers c
+inner join orders o on c.customer_id = o.customer_id
+where o.status = 'completed'
+group by c.customer_id, c.name
+having COUNT(o.order_id) > 3
+order by total_spend desc;
+
+
+with ranked_orders as (
+    select c.customer_id, c.name, o.order_id, o.order_date, o.total_amount,
+           AVG(o.total_amount) over (partition by c.customer_id) as avg_order_value,
+           row_number() over (partition by c.customer_id order by o.order_date desc) as rn
+    from customers c
+    inner join orders o on c.customer_id = o.customer_id
+    where o.status = 'completed'
+)
+select customer_id, name, order_id, order_date, total_amount, avg_order_value,
+       total_amount - avg_order_value as vs_avg
+from ranked_orders
+where rn = 1;
+
+select st.category, 
+       AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600) 
+        FILTER (WHERE resolved_at IS NOT NULL) AS avg_resolution_hours,
+       SUM(CASE WHEN st.ticket_id = NULL THEN 1 ELSE 0 END) as total_unresolved_tickets, 
+       COUNT(*) as total_volume
+from support_tickets st
+group by st.category
+order by avg_resolution_hours desc;
+
+select u.vip_tier,
+        Count(DISTINCT b.user_id) as distinct_depositors,
+        SUM(b.payout_amount) as total_deposit_amount,
+        AVG(b.payout_amount) as avg_deposit_amount
+from users u
+inner join bets b on u.user_id = b.user_id
+where b.status = 'won'
+group by u.vip_tier
+order by total_deposit_amount desc;
+
+
+with deposit_stats as (
+    select u.user_id, t.transaction_id, t.transaction_date, t.amount,
+              AVG(t.amount) over (partition by t.user_id) as avg_deposit_amount
+              COUNT(t.transaction_id) over (partition by t.user_id) as deposit_count
+    from users u
+    inner join transactions t on u.user_id = t.user_id
+    where t.type = 'deposit' and t.status = 'completed'
+)
+
+select user_id, transaction_id, transaction_date, amount, avg_deposit_amount,
+       true as is_suspicious
+from deposit_stats
+where deposit_count >= 5 and amount > avg_deposit_amount * 3;
+
