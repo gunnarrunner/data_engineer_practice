@@ -109,7 +109,7 @@ group by t.status
 order by avg_transaction_amount desc;
 
 with ranked_bets as (
-    b.user_id,
+    select b.user_id,
     b.bet_id,
     b.bet_date,
     b.stake_amount,
@@ -123,3 +123,18 @@ select user_id, bet_id, bet_date, stake_amount, avg_stake_amount, bet_count
 from ranked_bets
 where rn = 1 and bet_count >= 5
 order by user_id;
+
+with ranked_transactions as (
+    select t.user_id, t.txn_id, t.amount,
+            AVG(t.amount) over (partition by t.user_id) as avg_txn_amount,
+            COUNT(t.txn_id) over (partition by t.user_id) as txn_count,
+            row_number() over (partition by t.user_id order by t.txn_date desc) as rn
+    from transactions t
+    where t.txn_type = 'deposit'
+)
+
+select user_id, txn_id, amount, avg_txn_amount, txn_count
+from ranked_transactions
+where rn = 1 and txn_count >= 3
+order by user_id;
+
