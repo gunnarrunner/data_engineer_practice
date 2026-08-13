@@ -108,3 +108,18 @@ where u.vip_tier IN ('gold', 'platinum') and t.txn_type = 'deposit' and t.txn_da
 group by t.status
 order by avg_transaction_amount desc;
 
+with ranked_bets as (
+    b.user_id,
+    b.bet_id,
+    b.bet_date,
+    b.stake_amount,
+    round(avg(b.stake_amount) over (partition by b.udrer_id), 2) as avg_stake_amount,
+    count(*) over (partition by b.user_id) as bet_count,
+    row_number() over (partition by b.user_id order by b.bet_date desc) as rn
+    from bets b
+)
+
+select user_id, bet_id, bet_date, stake_amount, avg_stake_amount, bet_count
+from ranked_bets
+where rn = 1 and bet_count >= 5
+order by user_id;
