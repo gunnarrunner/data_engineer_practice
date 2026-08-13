@@ -92,3 +92,19 @@ select user_id, transaction_id, transaction_date, amount, avg_deposit_amount,
 from deposit_stats
 where deposit_count >= 5 and amount > avg_deposit_amount * 3;
 
+select a.team,
+AVG(EXTRACT(EPOCH FROM (st.closed_at - st.opened_at)) / 3600) as avg_resolution_hours
+from support_tickets st
+left join agents a on st.agent_id = a.agent_id
+where st.closed_at is not null and st.closed_at >= current_date - interval '30 days'
+group by a.team
+order by avg_resolution_hours desc;
+
+select t.status, 
+       round(AVG(amount), 2) as avg_transaction_amount
+from transactions t
+inner join users u on t.user_id = u.user_id
+where u.vip_tier IN ('gold', 'platinum') and t.txn_type = 'deposit' and t.txn_date >= current_date - interval '90 days'
+group by t.status
+order by avg_transaction_amount desc;
+
