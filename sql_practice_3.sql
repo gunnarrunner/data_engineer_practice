@@ -118,7 +118,7 @@ with ranked_bets as (
     row_number() over (partition by b.user_id order by b.bet_date desc) as rn
     from bets b
 )
-
+-- COALESCE(state, 'unknown') as state
 select user_id, bet_id, bet_date, stake_amount, avg_stake_amount, bet_count
 from ranked_bets
 where rn = 1 and bet_count >= 5
@@ -138,3 +138,52 @@ from ranked_transactions
 where rn = 1 and txn_count >= 3
 order by user_id;
 
+with ranked_bets as (
+    select b.user_id, b.bet_id, b.stake_amount,
+            AVG(b.stake_amount) over (partition by b.user_id) as avg_stake_amount,
+            COUNT(b.bet_id) over (partition by b.user_id) as bet_count,
+            row_number() over (partition by b.user_id order by b.bet_date desc) as rn
+    from bets b 
+    where b.outcome = 'win'
+)
+
+select user_id, bet_id, stake_amount, avg_stake_amount
+from ranked_bets
+where rn = 1 and bet_count >= 4
+order by user_id;
+
+with ranked_transactions as (
+    select t.user_id,
+        t.txn_date,
+        LAG(t.txn_date) over (partition by t.user_id order by t.txn_date) as prev_txn_date,
+        round(extract(epoch from (t.txn_date - LAG(t.txn_date) over (partition by t.user_id order by t.txn_date))) / 60, 2) as minutes_between
+        from transactions t
+        where t.txn_type = 'deposit'
+)
+
+select user_id, txn_date, prev_txn_date, minutes_between
+from ranked_transactions
+where minutes_between < 10
+order by user_id, txn_date;
+
+with sum_transactions as (
+    select t.user_id,
+           SUM(t.amount) over (partition by t.user_id order by t.txn_date) as total_amount
+    from transactions t
+    where t.txn_type = 'deposit'
+)
+
+select user_id, total_amount
+from sum_transactions;
+
+with sum_bets as (
+    select b.user_id,
+     b.bet_date,
+    b.stake_amount,
+    SUM(b.stake_amount) over (partition by b.user_id order by b.bet_date) as total_stake
+    from bets b
+)
+
+select user_id, bet_date, stake_amount, total_stake
+from sum_bets
+order by user_id, bet_date desc;
